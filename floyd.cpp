@@ -49,8 +49,7 @@ void Server(int pcount, char *file) {
     int N, index;
     M_in >> N;
 
-    // Generate the dataset
-    double data[N * N];
+    double *data = new double[N * N];
     for (int y = 0; y < N; ++y) {
         for (int x = 0; x < N; ++x) {
             M_in >> data[y * N + x];
@@ -66,13 +65,14 @@ void Server(int pcount, char *file) {
 
     FloydsAlgorithm(0, pcount, data, N);
 
-    double t[N * N];
+    double *t = new double[N * N];
     for(int p = 1; p < pcount; ++p) {
         MPI_Recv(&t, N * N, MPI_DOUBLE, p, 0, MPI_COMM_WORLD, &status);
         for(int v = 0; v < N * N; ++v) {
             data[v] = min(data[v], t[v]);
         }
     }
+    delete[] t;
     time = getClock() - time;
 
     // Finally, print the result
@@ -84,6 +84,7 @@ void Server(int pcount, char *file) {
         }
         cout << endl;
     }
+    delete[] data;
 }
 
 // Slave process - receives a request, performs floyd's algorithm, and returns a subset of the data
@@ -94,7 +95,7 @@ void Slave(int rank, int pcount) {
     // Receive broadcast of N (the width/height of the matrix)
     MPI_Bcast (&N, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    double data[N * N];
+    double *data = new double[N * N];
 
     // Receive the matrix
     MPI_Bcast(&data, N * N, MPI_DOUBLE, 0, MPI_COMM_WORLD);
@@ -104,6 +105,7 @@ void Slave(int rank, int pcount) {
 
     // Send my data
     MPI_Send(data, N * N, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
+    delete[] data;
 }
 
 /**
@@ -124,7 +126,7 @@ int main(int argc, char * argv[]) {
 
     // Take a filename as a param
     if (argc > 1) {
-         file = argv[1];
+        file = argv[1];
     } else {
         cout << "Please supply a filename" << endl;
         MPI_Finalize();
