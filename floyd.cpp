@@ -74,12 +74,14 @@ void Server(int pcount, const char *filename) {
     // Print the result.
     cout << "tasks: " << pcount << endl;
     cout << "time: " << time << endl;
+/*
     for (int i = 0; i < N; ++i) {
         for (int j = 0; j < N; ++j) {
             cout << data[i * N + j] << " ";
         }
         cout << endl;
     }
+*/
     delete[] data;
 }
 
