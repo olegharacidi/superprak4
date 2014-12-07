@@ -30,7 +30,7 @@ void FloydsAlgorithm(int pcount, double *data, int N, int start, int end) {
         }
         MPI_Bcast(&data[k * N], N, MPI_DOUBLE, owner, MPI_COMM_WORLD);
 
-        #pragma omp parallel for collapse(2) num_threads(8)
+        #pragma omp parallel for collapse(2)
         for (int i = start; i < end; ++i) {
             for (int j = 0; j < N; ++j) {
                 data[i * N + j] = min(data[i * N + j], data[i * N + k] + data[k * N + j]);
