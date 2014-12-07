@@ -93,7 +93,7 @@ void Slave(int rank, int pcount) {
     double *data = new double[N * N];
 
     // Receive the matrix.
-    MPI_Bcast(&data, N * N, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Bcast(data, N * N, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     int start = N * rank / pcount;
     int end = N * (rank + 1) / pcount;
