@@ -86,7 +86,7 @@ void Server(int pcount, const char *filename) {
 }
 
 // Slave process - receives a request, performs Floyd's algorithm, and returns a subset of the data.
-void Slave(int rank, int pcount) {
+void Slave(int pcount, int rank) {
     int N;
     MPI_Status status;
 
@@ -110,19 +110,20 @@ void Slave(int rank, int pcount) {
 }
 
 int main(int argc, char * argv[]) {
-    int size, rank, len;
+    int pcount, rank, len;
     MPI_Init(&argc, &argv);
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Comm_size(MPI_COMM_WORLD, &pcount);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Get_processor_name(name, &len);
 
     const char *filename = argv[1];
-
-
+#ifndef NO_OMP
+    omp_set_num_threads(strtol(argv[2], NULL, 10));
+#endif
     if (rank == 0) {
-        Server(size, filename);
+        Server(pcount, filename);
     } else {
-        Slave(rank, size); 
+        Slave(pcount, rank); 
     }
     MPI_Finalize();
 }
