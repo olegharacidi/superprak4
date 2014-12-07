@@ -22,9 +22,7 @@ double getClock()
     return tp.tv_sec + tp.tv_usec / 1000000.0;
 }
 
-void FloydsAlgorithm(int rank, int pcount, double *data, int N) {
-    int start = N * rank / pcount;
-    int end = N * (rank + 1) / pcount;
+void FloydsAlgorithm(int pcount, double *data, int N, int start, int end) {
     int owner = 0;
     for (int k = 0; k < N; ++k) {
         while (k >= N * (owner + 1) / pcount) {
@@ -59,23 +57,20 @@ void Server(int pcount, char *file) {
     double time = getClock();
 
     // Broadcast out the matrix width/height
-    MPI_Bcast (&N, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&N, 1, MPI_INT, 0, MPI_COMM_WORLD);
     // Broadcast out the matrix contents
-    MPI_Bcast (data, N * N, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Bcast(data, N * N, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-    FloydsAlgorithm(0, pcount, data, N);
+    FloydsAlgorithm(pcount, data, N, 0, N / pcount);
 
-    double *t = new double[N * N];
     for(int p = 1; p < pcount; ++p) {
-        MPI_Recv(&t, N * N, MPI_DOUBLE, p, 0, MPI_COMM_WORLD, &status);
-        for(int v = 0; v < N * N; ++v) {
-            data[v] = min(data[v], t[v]);
-        }
+        int start = N * p / pcount;
+        int end = N * (p + 1) / pcount;
+        MPI_Recv(&data[start * N], N * (end - start), MPI_DOUBLE, p, 0, MPI_COMM_WORLD, &status);
     }
-    delete[] t;
     time = getClock() - time;
 
-    // Finally, print the result
+    // Print the result.
     cout << pcount << " threads" << endl;
     cout << "Time: " << time << endl;
     for (int i = 0; i < N; ++i) {
@@ -87,24 +82,27 @@ void Server(int pcount, char *file) {
     delete[] data;
 }
 
-// Slave process - receives a request, performs floyd's algorithm, and returns a subset of the data
+// Slave process - receives a request, performs Floyd's algorithm, and returns a subset of the data.
 void Slave(int rank, int pcount) {
     int N;
     MPI_Status status;
 
-    // Receive broadcast of N (the width/height of the matrix)
-    MPI_Bcast (&N, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    // Receive broadcast of N (the size of the matrix).
+    MPI_Bcast(&N, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     double *data = new double[N * N];
 
-    // Receive the matrix
+    // Receive the matrix.
     MPI_Bcast(&data, N * N, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-    // Perform my transformations
-    FloydsAlgorithm(rank, pcount, data, N);
+    int start = N * rank / pcount;
+    int end = N * (rank + 1) / pcount;
 
-    // Send my data
-    MPI_Send(data, N * N, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
+    // Run Floyd.
+    FloydsAlgorithm(pcount, data, N, start, end);
+
+    // Send my data.
+    MPI_Send(&data[start * N], (end - start) * N, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
     delete[] data;
 }
 
