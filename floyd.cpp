@@ -3,17 +3,17 @@
 #include <algorithm>
 #include <mpi.h>
 #include <math.h>
+#include <stdlib.h>
 #include <sys/time.h>
+#include <omp.h>
+
 using namespace std;
 
 char name[MPI_MAX_PROCESSOR_NAME];
 
-/**
- * GetClock
- * Used for benchmarking performance
- */
 double getClock()
 {
+    return MPI_Wtime();
     struct timeval tp;
     struct timezone tzp;
 
@@ -30,6 +30,7 @@ void FloydsAlgorithm(int pcount, double *data, int N, int start, int end) {
         }
         MPI_Bcast(&data[k * N], N, MPI_DOUBLE, owner, MPI_COMM_WORLD);
 
+        #pragma omp parallel for collapse(2)
         for (int i = start; i < end; ++i) {
             for (int j = 0; j < N; ++j) {
                 data[i * N + j] = min(data[i * N + j], data[i * N + k] + data[k * N + j]);
@@ -38,12 +39,12 @@ void FloydsAlgorithm(int pcount, double *data, int N, int start, int end) {
     }
 }
 
-void Server(int pcount, char *file) {
+void Server(int pcount, const char *filename) {
     MPI_Status status;
 
     FILE *I_in;
-    // Load in the Adjacency matrix to test
-    ifstream M_in(file, ios::in);
+    // Load in the Adjacency matrix.
+    ifstream M_in(filename, ios::in);
     int N, index;
     M_in >> N;
 
@@ -56,9 +57,9 @@ void Server(int pcount, char *file) {
 
     double time = getClock();
 
-    // Broadcast out the matrix width/height
+    // Broadcast out the matrix width/height.
     MPI_Bcast(&N, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    // Broadcast out the matrix contents
+    // Broadcast out the matrix contents.
     MPI_Bcast(data, N * N, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     FloydsAlgorithm(pcount, data, N, 0, N / pcount);
@@ -71,8 +72,8 @@ void Server(int pcount, char *file) {
     time = getClock() - time;
 
     // Print the result.
-    cout << pcount << " threads" << endl;
-    cout << "Time: " << time << endl;
+    cout << "tasks: " << pcount << endl;
+    cout << "time: " << time << endl;
     for (int i = 0; i < N; ++i) {
         for (int j = 0; j < N; ++j) {
             cout << data[i * N + j] << " ";
@@ -106,13 +107,6 @@ void Slave(int rank, int pcount) {
     delete[] data;
 }
 
-/**
- * Main function
- * Initializes the required mpi communication layer
- * and dispatches both the server and the slave processes
- * The server will also act as a slave to ensure that all the processors are
- * busy.
- */
 int main(int argc, char * argv[]) {
     int size, rank, len;
     MPI_Init(&argc, &argv);
@@ -120,21 +114,14 @@ int main(int argc, char * argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Get_processor_name(name, &len);
 
-    char *file;
+    const char *filename = argv[1];
 
-    // Take a filename as a param
-    if (argc > 1) {
-        file = argv[1];
-    } else {
-        cout << "Please supply a filename" << endl;
-        MPI_Finalize();
-        return 1;
-    }
 
     if (rank == 0) {
-        Server(size, file);
+        Server(size, filename);
     } else {
         Slave(rank, size); 
     }
     MPI_Finalize();
 }
+

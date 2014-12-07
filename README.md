@@ -3,15 +3,22 @@ compile the source on the remote host:
 ```
 ssh compiler
 module load impi
-mpicxx floyd.cpp -o floyd
+mpicxx floyd.cpp -o ~/_scratch/floyd
+mpicxx floyd.cpp -o ~/_scratch/floyd_omp -fopenmp
 exit
 ```
 
-run the binary from home directory:
+run the binary:
+1. MPI
 ```
-module load impi # you can run it only once during the session
-cp floyd ./_scratch
-sbatch -p test -n32 impi ~/floyd input-example.txt # n32 means 32 threads
+module load impi
+sbatch -p test -N 32 --ntasks-per-node=8 impi ~/floyd input-example.txt # -N 32 means 32 tasks
+```
+
+2. MPI + OpenMP
+```
+module load impi
+sbatch -p test -N 32 --ntasks-per-node=1 impi ~/floyd_omp input-example.txt # -N 32 means 32 tasks
 ```
 
 check the queue status:
