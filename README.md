@@ -9,6 +9,7 @@ exit
 ```
 
 run the binary:
+
 1. MPI
 ```
 module load impi
