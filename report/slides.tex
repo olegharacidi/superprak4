@@ -21,6 +21,7 @@
 \usepackage{amssymb}
 \usepackage{verbatim}
 \usepackage{hyperref}
+\usepackage{epstopdf}
 \usepackage{algorithm,algorithmic}
 \usetheme{Rochester}
 \setbeamercolor{background canvas}{bg=green!0}
@@ -92,7 +93,7 @@ $$\\
 \begin{minipage}{0.4\textwidth}
 \vspace{30pt}
 \begin{figure}[H]
-\includegraphics[width=\textwidth]{./par1.png}
+\includegraphics[width=0.8\textwidth]{./par1.png}
 \end{figure}
 \vspace{10pt}
 \end{minipage}
@@ -148,7 +149,9 @@ $K = 2^i, i = \overline{1, 5}$ ?
 
 \frame{
 \frametitle {Эксперименты. MPI}
-График speedup
+\begin{figure}[H]
+\includegraphics[width=\textwidth]{./mpi_speedup.eps}
+\end{figure}
 \begin{table}[H]
 \begin{tabular}{|c|c|c|}
 \hline
