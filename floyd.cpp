@@ -22,90 +22,114 @@ double getClock()
     return tp.tv_sec + tp.tv_usec / 1000000.0;
 }
 
-void FloydsAlgorithm(int pcount, double *data, int N, int start, int end) {
-    int owner = 0;
-    for (int k = 0; k < N; ++k) {
-        while (k >= N * (owner + 1) / pcount) {
-            ++owner;
-        }
-        MPI_Bcast(&data[k * N], N, MPI_DOUBLE, owner, MPI_COMM_WORLD);
-
-        #pragma omp parallel for collapse(2)
-        for (int i = start; i < end; ++i) {
-            for (int j = 0; j < N; ++j) {
-                data[i * N + j] = min(data[i * N + j], data[i * N + k] + data[k * N + j]);
-            }
+void readSubmatrix(double *buf, int M, int N, istream& in) {
+    for (int i = 0; i < M; i++) {
+        for (int j = 0; j < N; j++) {
+            in >> buf[i * N + j];
         }
     }
 }
 
-void Server(int pcount, const char *filename) {
+void printSubmatrix(double *buf, int M, int N, ostream& out) {
+    for (int i = 0; i < M; i++) {
+        for (int j = 0; j < N; j++) {
+            out << buf[i * N + j] << " ";
+        }
+        out << endl;
+    }
+}
+
+void floydsAlgorithm(int pcount, double *data, int M, int N, int rank) {
+    int owner = 0;
+    int start = N * rank / pcount;
+    double *kRowBuf = new double[N];
+    double *kRowPtr = NULL;
+    for (int k = 0; k < N; k) {
+        while (k >= N * (owner + 1) / pcount) {
+            owner++;
+        }
+        if (owner == rank) {
+            kRowPtr = &data[(k - start) * N];
+        } else {
+            kRowPtr = kRowBuf;
+        }
+        MPI_Bcast(kRowPtr, N, MPI_DOUBLE, owner, MPI_COMM_WORLD);
+
+        #pragma omp parallel for collapse(2)
+        for (int i = 0; i < M; ++i) {
+            for (int j = 0; j < N; j++) {
+                data[i * N + j] = min(data[i * N + j], data[i * N + k] + kRowPtr[j]);
+            }
+        }
+    }
+    delete[] kRowBuf;
+}
+
+void server(int pcount, const char *filename) {
     MPI_Status status;
 
     FILE *I_in;
-    // Load in the Adjacency matrix.
     ifstream M_in(filename, ios::in);
-    int N, index;
+    int N;
     M_in >> N;
 
-    double *data = new double[N * N];
-    for (int y = 0; y < N; ++y) {
-        for (int x = 0; x < N; ++x) {
-            M_in >> data[y * N + x];
-        }
+    // Submatrix for this process.
+    double *data = new double[N / pcount];
+    readSubmatrix(data, N / pcount, N, M_in);
+
+    // Buffer to send to the other processes.
+    double *buf = new double[N / pcount + 1];
+
+    MPI_Bcast(&N, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    for (int p = 1; p < pcount; p++) {
+        // Load the submatrix for the process p and sent it out.
+        int start = N * p / pcount;
+        int end = N * (p + 1) / pcount;
+        readSubmatrix(buf, end - start, N, M_in);
+        MPI_Send(buf, N * (end - start), MPI_DOUBLE, p, 0, MPI_COMM_WORLD);
     }
 
     double time = getClock();
-
-    // Broadcast out the matrix width/height.
-    MPI_Bcast(&N, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    // Broadcast out the matrix contents.
-    MPI_Bcast(data, N * N, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-
-    FloydsAlgorithm(pcount, data, N, 0, N / pcount);
-
-    for(int p = 1; p < pcount; ++p) {
-        int start = N * p / pcount;
-        int end = N * (p + 1) / pcount;
-        MPI_Recv(&data[start * N], N * (end - start), MPI_DOUBLE, p, 0, MPI_COMM_WORLD, &status);
-    }
+    floydsAlgorithm(pcount, data, N / pcount, N, 0);
     time = getClock() - time;
 
     // Print the result.
     cout << "tasks: " << pcount << endl;
     cout << "time: " << time << endl;
-/*
-    for (int i = 0; i < N; ++i) {
-        for (int j = 0; j < N; ++j) {
-            cout << data[i * N + j] << " ";
-        }
-        cout << endl;
+
+    printSubmatrix(data, N / pcount, N, cout);
+    for (int p = 1; p < pcount; p++) {
+        // Reveive submatrix from the process p and print it to the output.
+        int start = N * p / pcount;
+        int end = N * (p + 1) / pcount;
+        MPI_Recv(buf, N * (end - start), MPI_DOUBLE, p, 0, MPI_COMM_WORLD, &status);
+        printSubmatrix(buf, N / pcount, N, cout);
     }
-*/
+
+    delete[] buf;
     delete[] data;
 }
 
 // Slave process - receives a request, performs Floyd's algorithm, and returns a subset of the data.
-void Slave(int pcount, int rank) {
+void slave(int pcount, int rank) {
     int N;
     MPI_Status status;
 
     // Receive broadcast of N (the size of the matrix).
     MPI_Bcast(&N, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    double *data = new double[N * N];
-
-    // Receive the matrix.
-    MPI_Bcast(data, N * N, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    double *data = new double[N];
 
     int start = N * rank / pcount;
     int end = N * (rank + 1) / pcount;
+    // Receive the submatrix.
+    MPI_Recv(data, N * (end - start), MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, &status);
 
-    // Run Floyd.
-    FloydsAlgorithm(pcount, data, N, start, end);
+    // Run.
+    floydsAlgorithm(pcount, data, end - start, N, rank);
 
     // Send my data.
-    MPI_Send(&data[start * N], (end - start) * N, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
+    MPI_Send(data, N * (end - start), MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
     delete[] data;
 }
 
@@ -121,9 +145,9 @@ int main(int argc, char * argv[]) {
     omp_set_num_threads(strtol(argv[2], NULL, 10));
 #endif
     if (rank == 0) {
-        Server(pcount, filename);
+        server(pcount, filename);
     } else {
-        Slave(pcount, rank); 
+        slave(pcount, rank); 
     }
     MPI_Finalize();
 }
