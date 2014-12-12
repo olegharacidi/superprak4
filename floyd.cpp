@@ -93,9 +93,7 @@ void server(int pcount, const char *filename) {
     time = getClock() - time;
 
     // Print the result.
-    cout << "tasks: " << pcount << endl;
     cout << "time: " << time << endl;
-
 //    printSubmatrix(data, N / pcount, N, cout);
     for (int p = 1; p < pcount; p++) {
         // Reveive submatrix from the process p and print it to the output.
@@ -141,10 +139,16 @@ int main(int argc, char * argv[]) {
     MPI_Get_processor_name(name, &len);
 
     const char *filename = argv[1];
+  
 #ifndef NO_OMP
-    omp_set_num_threads(strtol(argv[2], NULL, 10));
+    int num_threads = strtol(argv[2], NULL, 10);
+    omp_set_num_threads(num_threads);
 #endif
     if (rank == 0) {
+        cout << "tasks: " << pcount << endl;
+#ifndef NO_OMP
+        cout << "threads per task: " << num_threads << endl;
+#endif    
         server(pcount, filename);
     } else {
         slave(pcount, rank); 
