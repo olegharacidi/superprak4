@@ -23,10 +23,8 @@ double getClock()
 }
 
 void readSubmatrix(double *buf, int M, int N, istream& in) {
-    for (int i = 0; i < M; i++) {
-        for (int j = 0; j < N; j++) {
-            in >> buf[i * N + j];
-        }
+    for (int i = 0; i < M * N; i++) {
+        in >> buf[i];
     }
 }
 
@@ -44,7 +42,7 @@ void floydsAlgorithm(int pcount, double *data, int M, int N, int rank) {
     int start = N * rank / pcount;
     double *kRowBuf = new double[N];
     double *kRowPtr = NULL;
-    for (int k = 0; k < N; k) {
+    for (int k = 0; k < N; k++) {
         while (k >= N * (owner + 1) / pcount) {
             owner++;
         }
@@ -74,11 +72,12 @@ void server(int pcount, const char *filename) {
     M_in >> N;
 
     // Submatrix for this process.
-    double *data = new double[N / pcount];
+
+    double *data = new double[N * (N / pcount)];
     readSubmatrix(data, N / pcount, N, M_in);
 
     // Buffer to send to the other processes.
-    double *buf = new double[N / pcount + 1];
+    double *buf = new double[N * (N / pcount + 1)];
 
     MPI_Bcast(&N, 1, MPI_INT, 0, MPI_COMM_WORLD);
     for (int p = 1; p < pcount; p++) {
@@ -103,7 +102,7 @@ void server(int pcount, const char *filename) {
         int start = N * p / pcount;
         int end = N * (p + 1) / pcount;
         MPI_Recv(buf, N * (end - start), MPI_DOUBLE, p, 0, MPI_COMM_WORLD, &status);
-        printSubmatrix(buf, N / pcount, N, cout);
+        printSubmatrix(buf, end - start, N, cout);
     }
 
     delete[] buf;
@@ -118,10 +117,11 @@ void slave(int pcount, int rank) {
     // Receive broadcast of N (the size of the matrix).
     MPI_Bcast(&N, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    double *data = new double[N];
-
     int start = N * rank / pcount;
     int end = N * (rank + 1) / pcount;
+
+    double *data = new double[N * (end - start)];
+
     // Receive the submatrix.
     MPI_Recv(data, N * (end - start), MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, &status);
 
