@@ -96,13 +96,13 @@ void server(int pcount, const char *filename) {
     cout << "tasks: " << pcount << endl;
     cout << "time: " << time << endl;
 
-    printSubmatrix(data, N / pcount, N, cout);
+//    printSubmatrix(data, N / pcount, N, cout);
     for (int p = 1; p < pcount; p++) {
         // Reveive submatrix from the process p and print it to the output.
         int start = N * p / pcount;
         int end = N * (p + 1) / pcount;
         MPI_Recv(buf, N * (end - start), MPI_DOUBLE, p, 0, MPI_COMM_WORLD, &status);
-        printSubmatrix(buf, end - start, N, cout);
+        // printSubmatrix(buf, end - start, N, cout);
     }
 
     delete[] buf;
