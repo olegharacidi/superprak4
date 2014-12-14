@@ -1,26 +1,11 @@
 #include <iostream>
 #include <fstream>
-#include <algorithm>
 #include <mpi.h>
 #include <math.h>
 #include <stdlib.h>
-#include <sys/time.h>
 #include <omp.h>
 
 using namespace std;
-
-char name[MPI_MAX_PROCESSOR_NAME];
-
-double getClock()
-{
-    return MPI_Wtime();
-    struct timeval tp;
-    struct timezone tzp;
-
-    gettimeofday(&tp, &tzp);
-
-    return tp.tv_sec + tp.tv_usec / 1000000.0;
-}
 
 void readSubmatrix(double *buf, int M, int N, istream& in) {
     for (int i = 0; i < M * N; i++) {
@@ -53,7 +38,7 @@ void floydsAlgorithm(int pcount, double *data, int M, int N, int rank) {
         }
         MPI_Bcast(kRowPtr, N, MPI_DOUBLE, owner, MPI_COMM_WORLD);
 
-        #pragma omp parallel for collapse(2)
+        #pragma omp parallel for
         for (int i = 0; i < M; ++i) {
             for (int j = 0; j < N; j++) {
                 data[i * N + j] = min(data[i * N + j], data[i * N + k] + kRowPtr[j]);
@@ -63,18 +48,22 @@ void floydsAlgorithm(int pcount, double *data, int M, int N, int rank) {
     delete[] kRowBuf;
 }
 
+/*
+  Server process - loads the data, sends patches to the slaves, runs Floyd's
+  algorithm on its own patch, receives the resulting patches from the slaves
+  and prints the result to the output.
+*/
 void server(int pcount, const char *filename) {
     MPI_Status status;
 
-    FILE *I_in;
-    ifstream M_in(filename, ios::in);
+    ifstream fin(filename, ios::in);
     int N;
-    M_in >> N;
+    fin >> N;
 
     // Submatrix for this process.
 
     double *data = new double[N * (N / pcount)];
-    readSubmatrix(data, N / pcount, N, M_in);
+    readSubmatrix(data, N / pcount, N, fin);
 
     // Buffer to send to the other processes.
     double *buf = new double[N * (N / pcount + 1)];
@@ -84,17 +73,18 @@ void server(int pcount, const char *filename) {
         // Load the submatrix for the process p and sent it out.
         int start = N * p / pcount;
         int end = N * (p + 1) / pcount;
-        readSubmatrix(buf, end - start, N, M_in);
+        readSubmatrix(buf, end - start, N, fin);
         MPI_Send(buf, N * (end - start), MPI_DOUBLE, p, 0, MPI_COMM_WORLD);
     }
+    fin.close();
 
     MPI_Barrier(MPI_COMM_WORLD);
-    double time = getClock();
+    double time = MPI_Wtime();
 
     floydsAlgorithm(pcount, data, N / pcount, N, 0);
 
     MPI_Barrier(MPI_COMM_WORLD);
-    time = getClock() - time;
+    time = MPI_Wtime() - time;
 
     // Print the result.
     cout << "time: " << time << endl;
@@ -111,7 +101,7 @@ void server(int pcount, const char *filename) {
     delete[] data;
 }
 
-// Slave process - receives a request, performs Floyd's algorithm, and returns a subset of the data.
+// Slave process - receives a request, performs Floyd's algorithm, and returns the result.
 void slave(int pcount, int rank) {
     int N;
     MPI_Status status;
@@ -136,14 +126,13 @@ void slave(int pcount, int rank) {
 }
 
 int main(int argc, char * argv[]) {
-    int pcount, rank, len;
+    int pcount, rank;
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &pcount);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Get_processor_name(name, &len);
 
     const char *filename = argv[1];
-  
+
 #ifndef NO_OMP
     int num_threads = strtol(argv[2], NULL, 10);
     omp_set_num_threads(num_threads);
@@ -159,4 +148,3 @@ int main(int argc, char * argv[]) {
     }
     MPI_Finalize();
 }
-
