@@ -88,8 +88,12 @@ void server(int pcount, const char *filename) {
         MPI_Send(buf, N * (end - start), MPI_DOUBLE, p, 0, MPI_COMM_WORLD);
     }
 
+    MPI_Barrier(MPI_COMM_WORLD);
     double time = getClock();
+
     floydsAlgorithm(pcount, data, N / pcount, N, 0);
+
+    MPI_Barrier(MPI_COMM_WORLD);
     time = getClock() - time;
 
     // Print the result.
