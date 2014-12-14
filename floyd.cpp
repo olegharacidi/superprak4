@@ -101,7 +101,10 @@ void server(int pcount, const char *filename) {
     delete[] data;
 }
 
-// Slave process - receives a request, performs Floyd's algorithm, and returns the result.
+/*
+  Slave process - receives a request, performs Floyd's algorithm,
+  and returns the result.
+*/
 void slave(int pcount, int rank) {
     int N;
     MPI_Status status;
@@ -117,9 +120,11 @@ void slave(int pcount, int rank) {
     // Receive the submatrix.
     MPI_Recv(data, N * (end - start), MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, &status);
 
+    MPI_Barrier(MPI_COMM_WORLD);
     // Run.
     floydsAlgorithm(pcount, data, end - start, N, rank);
 
+    MPI_Barrier(MPI_COMM_WORLD);
     // Send my data.
     MPI_Send(data, N * (end - start), MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
     delete[] data;
